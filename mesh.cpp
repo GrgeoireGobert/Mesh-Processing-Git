@@ -401,7 +401,7 @@ void Mesh::compute_normal_and_mean()
 
 
 
-void Mesh::split_triangle(const int face_index, const int vertex_index)
+QVector<int> Mesh::split_triangle(const int face_index, const int vertex_index)
 {
     // LES FACES
     int A_index(facesTab[face_index][0]);
@@ -461,6 +461,7 @@ void Mesh::split_triangle(const int face_index, const int vertex_index)
     //std::cout << "voisins de f1 --- " << adjFacesTab[f1_index][0] << " " <<  adjFacesTab[f1_index][1] << " " <<  adjFacesTab[f1_index][2] << std::endl;
     //std::cout << "voisins de f2 --- " << adjFacesTab[f2_index][0] << " " <<  adjFacesTab[f2_index][1] << " " <<  adjFacesTab[f2_index][2] << std::endl;
 
+    return {fA_index,fB_index,fC_index};
 }
 
 
@@ -750,7 +751,7 @@ Triangulation::Triangulation()
 
 
 // pt est  un point 2D (x,y,z=0)
-void Triangulation::add_point_in_triangulation(int pt_index)
+QVector<int> Triangulation::add_point_in_triangulation(int pt_index)
 {
     //Chercher les triangles qui contiennent le pt (mais pas parmi les 3 triangles infinis)
     int nb_faces=facesTab.size();
@@ -764,7 +765,7 @@ void Triangulation::add_point_in_triangulation(int pt_index)
         if(test>0.0)
         {
             //Alors split le triangle
-            split_triangle(i,pt_index);
+            return split_triangle(i,pt_index);
             break;
         }
         else if(test==0.0)
@@ -786,18 +787,24 @@ void Triangulation::drawMeshWireFrame()
         {
             continue;
         }
+        Point A = vertexTab[facesTab.at(i).at(0)];
+        A=Point(A.x()-x_moy,A.y()-y_moy,A.z()-z_moy);
+        Point B = vertexTab[facesTab.at(i).at(1)];
+        B=Point(B.x()-x_moy,B.y()-y_moy,B.z()-z_moy);
+        Point C = vertexTab[facesTab.at(i).at(2)];
+        C=Point(C.x()-x_moy,C.y()-y_moy,C.z()-z_moy);
         //Affichage classique
         glBegin(GL_LINE_STRIP);
-            glVertexDraw(vertexTab[facesTab.at(i).at(0)]);
-            glVertexDraw(vertexTab[facesTab.at(i).at(1)]);
+            glVertexDraw(A);
+            glVertexDraw(B);
         glEnd();
         glBegin(GL_LINE_STRIP);
-            glVertexDraw(vertexTab[facesTab.at(i).at(1)]);
-            glVertexDraw(vertexTab[facesTab.at(i).at(2)]);
+            glVertexDraw(B);
+            glVertexDraw(C);
         glEnd();
         glBegin(GL_LINE_STRIP);
-            glVertexDraw(vertexTab[facesTab.at(i).at(2)]);
-            glVertexDraw(vertexTab[facesTab.at(i).at(0)]);
+            glVertexDraw(C);
+            glVertexDraw(A);
         glEnd();
     }
 
@@ -828,6 +835,9 @@ void Triangulation::triangulate()
         if(z>z_max){z_max=z;}
     }
 
+    x_moy=0.5*(x_min+x_max);
+    y_moy=0.5*(y_min+y_max);
+    z_moy=0.5*(z_min+z_max);
 
     //Creation du triangle fictif et du point infini
     int P1_index=vertexTab.size();
@@ -861,18 +871,28 @@ void Triangulation::triangulate()
     int nb_true_vertices=vertexTab.size()-4;
     for(int i=0;i<nb_true_vertices;i++)
     {
-        add_point_in_triangulation(i);
+        //Ajout point naivement
+        // ---
+        QVector<int> faces_list;
+        // ---
+        faces_list = add_point_in_triangulation(i);
+        //Verification des triangles en conflit
         QVector<QVector<int>> pile;
         bool again=true;
         while(again==true)
         {
             //Parcourt des faces (sauf les faces infinies)
-            int nombre_faces=facesTab.size();
-            for(int f=3;f<nombre_faces;f++)
+            int nombre_faces=faces_list.size();
+            //for(int f=3;f<nombre_faces;f++)
+            for(int F=0;F<nombre_faces;F++)
             {
+                // ---
+                int f = faces_list[F];
+                QVector<QVector<int>> sommets_adjacents={};
+                // ---
+
                 //La face en question
                 QVector<int> face = facesTab[f];
-                QVector<QVector<int>> sommets_adjacents={};
 
                 //Parcourt des faces adjacentes pour recuperer les 3 sommets adjacents (ceux pas sur le triangle)
                 for(int adj=0;adj<3;adj++)
@@ -922,6 +942,11 @@ void Triangulation::triangulate()
                 }
             }
 
+
+            // ---
+            QVector<int> new_faces_list={};
+            // ---
+
             int taille_pile = pile.size();
             //Cas ou on est de Delaunay
             if(taille_pile==0){again=false;}
@@ -930,17 +955,46 @@ void Triangulation::triangulate()
             {
                 for(int elt=0; elt<taille_pile; elt++)
                 {
-                    //std::cout << "TRIANGLE 289 " << facesTab[289][0] << " "<< facesTab[289][1] << " "<< facesTab[289][2] << std::endl;
                     //On flipe l'arete commune
                     QVector<int> paire_faces=pile[elt];
-                    flip_edge(paire_faces[0],paire_faces[1]);
+
+                    //On verifie qu'on n'a pas deja flippé une des faces
+                    bool already_flipped=false;
+                    for (int prev_elt=0;prev_elt<elt;prev_elt++)
+                    {
+                        if(pile[prev_elt][0]==paire_faces[0] ||pile[prev_elt][0]==paire_faces[1] ||pile[prev_elt][1]==paire_faces[0] ||pile[prev_elt][1]==paire_faces[1])
+                        {
+                            new_faces_list.push_back(pile[prev_elt][0]);
+                            new_faces_list.push_back(pile[prev_elt][1]);
+                            already_flipped=true;
+                            break;
+                        }
+                    }
+
+                    //Si c'est ok
+                    if(already_flipped==false)
+                    {
+                        // ---
+                        QVector<int> adj_paire_0=adjFacesTab[paire_faces[0]];
+                        QVector<int> adj_paire_1=adjFacesTab[paire_faces[1]];
+                        for(int ADJ_FACE =0; ADJ_FACE<3;ADJ_FACE++)
+                        {
+                            new_faces_list.push_back(adj_paire_0[ADJ_FACE]);
+                        }
+                        for(int ADJ_FACE =0; ADJ_FACE<3;ADJ_FACE++)
+                        {
+                            new_faces_list.push_back(adj_paire_1[ADJ_FACE]);
+                        }
+                        flip_edge(paire_faces[0],paire_faces[1]);
+                    }
                 }
                 pile={};
             }
+            faces_list=new_faces_list;
             //again=false;
-            // Affichage de l'avancement
-            std::cout << "Nombre de sommets ajoutes : " << i << "/" << nb_true_vertices << std::endl;
         }
+        // Affichage de l'avancement
+        std::cout << "Nombre de sommets ajoutes : " << i << "/" << nb_true_vertices << std::endl;
     }
 
     //Puis on redirige les 3 sommets du triangle fictif vers le sommet infini

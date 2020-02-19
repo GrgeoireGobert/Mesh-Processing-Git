@@ -27,7 +27,7 @@ public:
     double x() const { return _x; }
     double y() const { return _y; }
     double z() const { return _z; }
-    double get_face_index() const { return face_index; }
+    int get_face_index() const { return face_index; }
     void set_face_index(int index) { face_index=index; }
     void set_courbure(double value_courbure) { courbure=value_courbure; }
     double get_courbure() { return courbure; }
@@ -58,7 +58,7 @@ public:
     face_around_it end(int vertex_index);
 
     void compute_normal_and_mean();
-    void split_triangle(const int face_index,const int vertex_index);
+    QVector<int> split_triangle(const int face_index,const int vertex_index);
     void flip_edge(int face_1_index,int face_2_index);
 
     int nb_faces;
@@ -101,10 +101,13 @@ class Triangulation :public Mesh
 {
 public:
     int P_inf_index;
+    double x_moy;
+    double y_moy;
+    double z_moy;
 
     //Constructeur
     Triangulation();
-    void add_point_in_triangulation(int pt_index);
+    QVector<int> add_point_in_triangulation(int pt_index);
     void triangulate();
     //Réécriture du drawmesh pour ne pas prendre en compte les triangles avec pt infini
     void drawMeshWireFrame();
