@@ -5,6 +5,7 @@
 #include <map>
 #include <cmath>
 #include <queue>
+#include <stdlib.h>
 
 Mesh::Mesh()
 {
@@ -15,7 +16,7 @@ Mesh::Mesh()
 
     //Lecture du fichier OFF
     QString fileName="C:/empty.off";
-   // QString fileName="C:/queen.off";
+    //QString fileName="C:/queen.off";
     QFile fichier(fileName);
     fichier.open(QIODevice::ReadOnly | QIODevice::Text);
     QTextStream flux(&fichier);
@@ -213,9 +214,7 @@ void Mesh::drawMeshCurvature() {
         mean_curv_face=mean_curv_face/3.0;
 
         double normalized_curv=(log(mean_curv_face)-log(min_curv))/(log(max_curv)-log(min_curv));
-        if(normalized_curv*10>0.5) {glColor3d(normalized_curv*10,0.0,0.0);}
-        else if(normalized_curv*100>0) {glColor3d(0.0,normalized_curv*100,0.0);}
-        else {glColor3d(0.0,0.0,normalized_curv*1000000);}
+        glColor3d(0.0,0.0,normalized_curv*100);
         /*
         if(normalized_curv<0.33){glColor3d(1,0,0);}
         else if(normalized_curv<0.33){glColor3d(0,1,0);}
@@ -749,29 +748,89 @@ Triangulation::Triangulation()
     triangulate();
 }
 
+double segment_intersection_test(Point& A, Point& P, Point* C, Point* D)
+{
+    Point* Aa =  &A;
+    Point* Pp =  &P;
+
+    Point AP(Pp->x()-Aa->x(),Pp->y()-Aa->y(),0.0);
+    Point AC(C->x()-Aa->x(),C->y()-Aa->y(),0.0);
+    Point AD(D->x()-Aa->x(),D->y()-Aa->y(),0.0);
+
+    Point CA(Aa->x()-C->x(),Aa->y()-C->y(),0.0);
+    Point CP(Pp->x()-C->x(),Pp->y()-C->y(),0.0);
+    Point CD(D->x()-C->x(),D->y()-C->y(),0.0);
+
+    //CP vect CD projeté sur Oz
+    double test1= CP.x()*CD.y() - CP.y()*CD.x();
+
+    //CD vect CA projeté sur Oz
+    double test2= CD.x()*CA.y() - CD.y()*CA.x();
+
+    //AC vect AP projeté sur Oz
+    double test3= AC.x()*AP.y() - AC.y()*AP.x();
+
+    //AP vect AD projeté sur Oz
+    double test4= AP.x()*AD.y() - AP.y()*AD.x();
+
+    if(test1>0 && test2>0 && test3>0 && test4>0){
+        return 1.0;
+    }
+    else{return -1.0;}
+
+}
 
 // pt est  un point 2D (x,y,z=0)
 QVector<int> Triangulation::add_point_in_triangulation(int pt_index)
 {
-    //Chercher les triangles qui contiennent le pt (mais pas parmi les 3 triangles infinis)
-    int nb_faces=facesTab.size();
-    for(int i=3;i<nb_faces;i++)
+    //Choix d'un triangle de départ dans le mesh sauf parmis les 3 premiers triangle infini
+    int nb_faces = facesTab.size();
+    int start_triangle_index = rand() % (nb_faces - 3) + 3;
+
+    //Point de départ : centre de gravité du triangle de départ
+    Point pt0 = vertexTab[facesTab[start_triangle_index][0]];
+    Point pt1 = vertexTab[facesTab[start_triangle_index][1]];
+    Point pt2 = vertexTab[facesTab[start_triangle_index][2]];
+
+    Point start_point((pt0.x()+pt1.x()+pt2.x())/3,(pt0.y()+pt1.y()+pt2.y())/3,0.0);
+    Point end_point = vertexTab[pt_index];
+
+    int face_index = start_triangle_index;
+    while(true)
     {
+        //vérification si le point est dans le triangle courant
         QVector<Point*> triangle;
-        triangle.push_back(&vertexTab[facesTab[i][0]]);
-        triangle.push_back(&vertexTab[facesTab[i][1]]);
-        triangle.push_back(&vertexTab[facesTab[i][2]]);
+        triangle.push_back(&vertexTab[facesTab[face_index][0]]);
+        triangle.push_back(&vertexTab[facesTab[face_index][1]]);
+        triangle.push_back(&vertexTab[facesTab[face_index][2]]);
         double test=in_triangle_test(triangle,vertexTab[pt_index]);
         if(test>0.0)
         {
             //Alors split le triangle
-            return split_triangle(i,pt_index);
+            return split_triangle(face_index,pt_index);
             break;
         }
         else if(test==0.0)
         {
             std::cout << "Vertex " << pt_index << "sur bord d'un triangle"<< std::endl;
         }
+
+        //Si ce n'est pas le cas : on cherche le triangle suivant
+        //Parcours des arrêtes pour savoir laquelle coupe le segment AB
+        if(segment_intersection_test(start_point,end_point,triangle[0],triangle[1]) > 0.0)
+        {
+            face_index = adjFacesTab[face_index][2];
+        }
+        else if(segment_intersection_test(start_point,end_point,triangle[1],triangle[2])>0.0)
+        {
+            face_index = adjFacesTab[face_index][0];
+        }
+        else
+        {
+            face_index = adjFacesTab[face_index][1];
+        }
+
+
     }
 }
 

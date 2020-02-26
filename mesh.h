@@ -115,6 +115,7 @@ public:
 };
 
 // Fonctions annexes non methodes de classe
+double segment_intersection_test(Point& A, Point& P, Point* C, Point* D);
 double orientation_test(Point& pt1,Point& pt2,Point& pt3);
 double in_triangle_test(QVector<Point*> triangle, Point& pt);
 double in_circumscribed_circle_test(QVector<Point*> triangle, Point& pt);
